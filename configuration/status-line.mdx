@@ -1,0 +1,81 @@
+---
+title: "CC Safety Net Status Line: Real-Time Mode Indicators"
+sidebarTitle: "Status Line"
+description: "Display CC Safety Net's active protection mode in Claude Code's status line using bunx, npx, or claude x. Pipe alongside any existing status line command."
+---
+
+CC Safety Net can display its status in Claude Code's status line, showing which protection mode is active at a glance. This gives you a persistent, at-a-glance view of whether the safety hook is running and exactly which modes are engaged — without having to run a separate diagnostic command.
+
+## Setup
+
+Add a `statusLine` entry to your `~/.claude/settings.json`. Choose the runner that matches your environment:
+
+<Tabs>
+  <Tab title="Bun (recommended)">
+    ```json
+    {
+      "statusLine": {
+        "type": "command",
+        "command": "bunx cc-safety-net --statusline"
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Claude X">
+    ```json
+    {
+      "statusLine": {
+        "type": "command",
+        "command": "BUN_BE_BUN=1 claude x cc-safety-net --statusline"
+      }
+    }
+    ```
+
+    <Note>
+      The `claude x` command is only compatible with the native (non-npm) version of Claude Code. If you installed Claude Code via npm, use `bunx` or `npx` instead.
+    </Note>
+  </Tab>
+  <Tab title="NPM">
+    ```json
+    {
+      "statusLine": {
+        "type": "command",
+        "command": "npx -y cc-safety-net --statusline"
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Pipe with existing command">
+    If you already have a status line command, pipe CC Safety Net at the end so both outputs are shown together:
+
+    ```json
+    {
+      "statusLine": {
+        "type": "command",
+        "command": "your-existing-command | bunx cc-safety-net --statusline"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Mode Indicators
+
+The status line displays a different emoji depending on which environment variables are set. When multiple modes are active, their emojis are combined.
+
+| Status | Display | Meaning |
+|---|---|---|
+| Plugin disabled | 🛡️ Safety Net ❌ | The CC Safety Net plugin is not enabled |
+| Default mode | 🛡️ Safety Net ✅ | Protection active with default settings |
+| Strict mode | 🛡️ Safety Net 🔒 | `SAFETY_NET_STRICT=1` |
+| Paranoid mode | 🛡️ Safety Net 👁️ | `SAFETY_NET_PARANOID=1` |
+| Paranoid RM only | 🛡️ Safety Net 🗑️ | `SAFETY_NET_PARANOID_RM=1` |
+| Paranoid interpreters | 🛡️ Safety Net 🐚 | `SAFETY_NET_PARANOID_INTERPRETERS=1` |
+| Worktree mode | 🛡️ Safety Net 🌳 | `SAFETY_NET_WORKTREE=1` |
+| Strict + Paranoid | 🛡️ Safety Net 🔒👁️ | Both `SAFETY_NET_STRICT=1` and `SAFETY_NET_PARANOID=1` |
+
+For more information on what each mode does and when to use it, see [Modes](/configuration/modes).
+
+<Note>
+  Changes to `~/.claude/settings.json` take effect immediately — no restart of Claude Code is needed.
+</Note>

@@ -1,0 +1,51 @@
+---
+title: "Commands Allowed Through by CC Safety Net"
+sidebarTitle: "Allowed Commands"
+description: "Git and filesystem commands CC Safety Net explicitly allows. Safe variants of dangerous commands are recognized and permitted by the semantic analyzer."
+---
+
+CC Safety Net uses semantic command analysis to distinguish safe variants of potentially dangerous commands from truly destructive ones. These commands are explicitly allowed through.
+
+## Git Commands
+
+| Command Pattern | Why It's Safe |
+|---|---|
+| `git checkout -b <branch>` | Creates a new branch (no working tree changes) |
+| `git checkout --orphan` | Creates an orphan branch |
+| `git restore --staged` | Only unstages files, doesn't discard changes |
+| `git restore --help` / `--version` | Help/version output only |
+| `git branch -d` | Safe delete with merge check |
+| `git clean -n` / `--dry-run` | Preview only, no files deleted |
+| `git push --force-with-lease` | Safe force push (checks remote state first) |
+
+## Filesystem Commands
+
+| Command Pattern | Why It's Safe |
+|---|---|
+| `rm -rf /tmp/...` | Temp directories are ephemeral |
+| `rm -rf /var/tmp/...` | System temp directory |
+| `rm -rf $TMPDIR/...` | User's temp directory |
+| `rm -rf ./...` (within cwd) | Limited to current working directory |
+
+## Worktree Mode Exceptions
+
+With `SAFETY_NET_WORKTREE=1`, CC Safety Net relaxes local-discard rules when the command is confirmed to run inside a linked git worktree. Linked worktrees are designed as isolated, disposable workspaces — discarding changes inside one doesn't affect the main working tree. Worktree detection is fail-closed: if CC Safety Net cannot verify that the current directory is a linked worktree, the command remains blocked.
+
+The following commands are allowed inside a linked worktree when worktree mode is active:
+
+- `git restore <file>` and `git restore --worktree <file>`
+- `git checkout -- <file>` and `git checkout <ref> -- <file>`
+- `git switch --discard-changes` and `git switch -f` / `--force`
+- `git reset --hard` and `git reset --merge`
+- `git clean -f` (and combined flags like `-fd`)
+
+These commands remain blocked even inside a linked worktree, because they reach beyond the local working tree:
+
+- `git push --force` — affects the remote
+- `git branch -D` — affects shared refs
+- `git stash drop` / `git stash clear` — the stash is shared across worktrees
+- `git worktree remove --force` — could delete another worktree
+
+<Tip>
+  If CC Safety Net is blocking a command you believe is safe, run `npx cc-safety-net explain "<command>"` to see the full analysis and understand why.
+</Tip>

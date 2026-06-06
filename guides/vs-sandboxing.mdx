@@ -1,0 +1,62 @@
+---
+title: "CC Safety Net vs Claude Code OS-Level Native Sandboxing"
+sidebarTitle: "vs Sandboxing"
+description: "Compare CC Safety Net with Claude Code native sandboxing. They defend against different threats — use both together for complete defense-in-depth."
+---
+
+Claude Code offers [native sandboxing](https://code.claude.com/docs/en/sandboxing) that provides OS-level filesystem and network isolation. CC Safety Net operates at the application layer. They protect against different threats — using both gives the most complete protection.
+
+## Different Layers of Protection
+
+| | Sandboxing | CC Safety Net |
+|---|---|---|
+| **Enforcement** | OS-level (Seatbelt/bubblewrap) | Application-level (PreToolUse hook) |
+| **Approach** | Containment — restricts filesystem + network | Command analysis — blocks destructive operations |
+| **Filesystem** | Writes restricted (default: cwd); reads are broad | Only destructive operations blocked |
+| **Network** | Domain-based proxy filtering | None |
+| **Git awareness** | None | Explicit rules for destructive git operations |
+| **Bypass resistance** | High — OS enforces boundaries | Lower — analyzes command strings only |
+
+## Why Sandboxing Isn't Enough
+
+Sandboxing restricts *where* you can write, but it doesn't understand whether an operation is destructive *within* those boundaries. The following commands are all permitted by the sandbox because they operate inside the current working directory:
+
+<Note>
+  Whether these commands are auto-run or require confirmation depends on your sandbox mode (auto-allow vs regular permissions), and network access still depends on your allowed-domain policy. Claude Code can also retry a command outside the sandbox via `dangerouslyDisableSandbox` (with user permission); you can prevent this by setting `allowUnsandboxedCommands: false`.
+</Note>
+
+| Command | Sandboxing | CC Safety Net |
+|---|---|---|
+| `git reset --hard` | Allowed (within cwd) | Blocked |
+| `git checkout -- .` | Allowed (within cwd) | Blocked |
+| `git stash clear` | Allowed (within cwd) | Blocked |
+| `git push --force` | Allowed (if remote domain allowed) | Blocked |
+| `rm -rf .` | Allowed (within cwd) | Blocked |
+
+<Note>
+  Sandboxing sees `git reset --hard` as a safe operation — it only modifies files within the current directory. But your AI agent just discarded all of your uncommitted work.
+</Note>
+
+From the OS's perspective, these commands are entirely legitimate: they write to an allowed path, don't touch the network (except push), and complete without error. The sandbox has no concept of git history, uncommitted changes, or stash entries. CC Safety Net understands these semantics and blocks them accordingly.
+
+## When Sandboxing Is the Better Choice
+
+Sandboxing is the right tool when your primary concern is:
+
+- **Prompt injection attacks** — reduces exfiltration risk by restricting outbound network domains
+- **Malicious dependencies** — limits filesystem writes and network access from untrusted packages
+- **Untrusted code execution** — OS-level containment is fundamentally stronger than pattern matching
+- **Network control** — CC Safety Net has no network protection at all
+
+If you're running code from an untrusted source, or you're worried about a compromised dependency reaching out to an attacker-controlled server, sandboxing is the layer that addresses those threats.
+
+## Using Both Together
+
+<Tip>
+  Run both for defense-in-depth. They complement each other cleanly:
+
+  - **Sandboxing** contains the blast radius — even if something goes wrong, damage is limited to the current working directory and approved network domains.
+  - **CC Safety Net** prevents footguns — catches git-specific and filesystem-destructive mistakes that sandboxing permits because they operate within cwd.
+</Tip>
+
+Sandboxing handles unknown threats by constraining what the agent *can* do at the OS level. CC Safety Net handles known destructive patterns by intercepting commands before they execute. Together, they cover the gaps that each leaves on its own.

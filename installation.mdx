@@ -1,0 +1,118 @@
+---
+title: "Install CC Safety Net for Your AI Coding Agent"
+sidebarTitle: "Installation"
+description: "Step-by-step installation instructions for CC Safety Net across Claude Code, OpenCode, Gemini CLI, GitHub Copilot CLI, and Codex. Requires Node.js 18 or higher."
+---
+
+CC Safety Net installs as a plugin or hook directly inside your AI coding agent — no separate process or daemon required. **Node.js 18 or higher** must be available on your system before you begin. Choose your agent below to see the exact steps.
+
+<Tabs>
+  <Tab title="Claude Code">
+    Run these three commands inside Claude Code to install from the plugin marketplace:
+
+    ```bash
+    /plugin marketplace add kenryu42/cc-marketplace
+    /plugin install safety-net@cc-marketplace
+    /reload-plugins
+    ```
+
+    **Enable auto-updates**
+
+    To keep CC Safety Net up to date automatically, run `/plugin`, navigate to **Marketplaces**, select **cc-marketplace**, and enable **auto-update**.
+  </Tab>
+
+  <Tab title="OpenCode">
+    You have two options:
+
+    **Option A — Let an LLM do it**
+
+    Paste the following prompt into any LLM agent (Claude Code, OpenCode, Cursor, etc.) and it will configure the plugin for you:
+
+    ```
+    Install the cc-safety-net plugin in ~/.config/opencode/opencode.json (or .jsonc) according to the schema at: https://opencode.ai/config.json
+    ```
+
+    **Option B — Manual setup**
+
+    Open `~/.config/opencode/opencode.json` (or `.jsonc`) and add the plugin entry:
+
+    ```json
+    { "plugin": ["cc-safety-net"] }
+    ```
+
+    Save the file. OpenCode picks up plugin changes on the next session start.
+  </Tab>
+
+  <Tab title="Gemini CLI">
+    Install the Gemini Safety Net extension with a single command:
+
+    ```bash
+    gemini extensions install https://github.com/kenryu42/gemini-safety-net
+    ```
+
+    The extension is active immediately — no restart required.
+  </Tab>
+
+  <Tab title="Copilot CLI">
+    Run the following inside GitHub Copilot CLI:
+
+    ```bash
+    /plugin install kenryu42/copilot-safety-net
+    ```
+
+    <Note>
+      Restart Copilot CLI after installing the plugin for it to take effect.
+    </Note>
+  </Tab>
+
+  <Tab title="Codex">
+    Codex requires a few extra steps to enable plugin hook support before installing.
+
+    **Step 1 — Enable plugin hooks**
+
+    Add the following to `~/.codex/config.toml`:
+
+    ```toml
+    [features]
+    plugin_hooks = true
+    ```
+
+    **Step 2 — Add the marketplace**
+
+    ```bash
+    codex plugin marketplace add kenryu42/cc-marketplace
+    ```
+
+    **Step 3 — Install the plugin via the TUI**
+
+    Start Codex, then run `/plugins` in the TUI. Use the arrow keys to select **[cc-marketplace]** and press **Enter** to install.
+
+    **Step 4 — Trust the hook**
+
+    Run `/hooks` in the TUI, select the **safety-net PreToolUse hook**, and press `t` to trust it.
+  </Tab>
+</Tabs>
+
+## Verify Your Installation
+
+After installing, run the doctor command to confirm CC Safety Net is wired up correctly and blocking commands as expected:
+
+```bash
+npx cc-safety-net doctor
+# or with bun
+bunx cc-safety-net doctor
+```
+
+The doctor command runs through the following checks:
+
+| Check | What It Does |
+|---|---|
+| Hook Integration | Verifies the plugin is properly configured for each supported platform |
+| Self-Test | Runs sample commands to confirm blocking works correctly |
+| Configuration | Validates any custom rules in your user and project configs |
+| Environment | Shows the status of mode flags (`SAFETY_NET_STRICT`, `SAFETY_NET_PARANOID`, etc.) |
+| Recent Activity | Summarizes blocked commands from the last 7 days |
+| System Info | Displays versions of all relevant tools |
+| Update Check | Checks whether a newer version of CC Safety Net is available |
+
+If any check fails, the output includes a description of the problem and suggested remediation steps.

@@ -1,0 +1,108 @@
+---
+title: "CC Safety Net CLI Commands Reference"
+sidebarTitle: "CLI Commands"
+description: "Reference for all CC Safety Net CLI commands: doctor for diagnostics, explain for command tracing, --verify-config, --statusline, and --custom-rules-doc."
+---
+
+CC Safety Net provides CLI commands for diagnostics, command analysis, and configuration validation. Run them with `npx cc-safety-net` or `bunx cc-safety-net`.
+
+## doctor
+
+The `doctor` command runs a full health check of your CC Safety Net installation and prints a summary of what it finds.
+
+```bash
+npx cc-safety-net doctor
+bunx cc-safety-net doctor
+```
+
+| Check | Description |
+|---|---|
+| Hook Integration | Verifies the plugin is properly configured for each supported platform |
+| Self-Test | Runs sample commands to confirm blocking works correctly |
+| Configuration | Validates custom rules in user and project configs |
+| Environment | Shows status of mode flags (`SAFETY_NET_STRICT`, `SAFETY_NET_PARANOID`, etc.) |
+| Recent Activity | Summarizes blocked commands from the last 7 days |
+| System Info | Displays versions of all relevant tools |
+| Update Check | Checks if a newer version is available |
+
+**Flags:**
+
+| Flag | Description |
+|---|---|
+| `--json` | Output in JSON format (useful for sharing in bug reports) |
+| `--skip-update-check` | Skip the npm version check |
+
+## explain
+
+The `explain` command traces how CC Safety Net analyzes a command step-by-step. Use it to debug why a command is blocked or allowed, or to understand how a custom rule applies.
+
+```bash
+npx cc-safety-net explain "git reset --hard"
+bunx cc-safety-net explain "git reset --hard"
+```
+
+**Flags:**
+
+| Flag | Description |
+|---|---|
+| `--json` | Output the analysis as JSON |
+| `--cwd <path>` | Use a custom working directory for analysis |
+
+**Examples:**
+
+```bash
+npx cc-safety-net explain "rm -rf /"
+npx cc-safety-net explain --json "git checkout -- file.txt"
+npx cc-safety-net explain --cwd /tmp "git status"
+```
+
+## --verify-config
+
+The `--verify-config` flag (alias: `-vc`) validates your custom rules configuration file without running any other checks. Use this in CI pipelines or any time you manually edit `.safety-net.json` to confirm the file is well-formed and all rules are valid.
+
+```bash
+npx cc-safety-net --verify-config
+npx cc-safety-net -vc
+bunx cc-safety-net --verify-config
+```
+
+Returns exit code `0` if the configuration is valid, or a non-zero exit code if errors are found.
+
+## --statusline
+
+The `--statusline` flag outputs CC Safety Net's current status in a format suitable for Claude Code's status line. It shows whether protection is active and which modes are enabled.
+
+```bash
+bunx cc-safety-net --statusline
+npx -y cc-safety-net --statusline
+```
+
+See the [Status Line](/configuration/status-line) configuration page for setup instructions.
+
+## --custom-rules-doc
+
+The `--custom-rules-doc` flag prints a machine-readable prompt document describing the custom rules schema. Pass this output to your AI coding agent to let it help you write or validate `.safety-net.json` rules interactively.
+
+```bash
+npx cc-safety-net --custom-rules-doc
+bunx cc-safety-net --custom-rules-doc
+```
+
+## --version and --help
+
+You can check the installed version or get usage information at any time. The `--version` flag has a `-V` short alias, and `--help` has a `-h` short alias.
+
+```bash
+npx cc-safety-net --version
+npx cc-safety-net -V
+npx cc-safety-net --help
+npx cc-safety-net -h
+```
+
+Use `help <command>` or `<command> --help` to see usage for a specific subcommand:
+
+```bash
+npx cc-safety-net help explain
+npx cc-safety-net explain --help
+npx cc-safety-net help doctor
+```

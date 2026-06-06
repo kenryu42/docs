@@ -1,0 +1,109 @@
+---
+title: "How CC Safety Net Intercepts and Blocks Bash Commands"
+sidebarTitle: "How It Works"
+description: "How CC Safety Net intercepts Bash commands, runs semantic analysis, detects shell wrappers, and returns block decisions before execution."
+---
+
+CC Safety Net hooks into your AI agent's tool execution pipeline using a PreToolUse hook — a mechanism that runs *before* any Bash command executes. Rather than maintaining a list of forbidden strings, it parses each command into its components and reasons about intent. This page walks through exactly what happens between the moment your agent builds a command and when (or whether) that command runs.
+
+## The Hook Pipeline
+
+<Steps>
+  <Step title="Agent prepares a Bash command">
+    Your AI agent constructs a shell command to execute — for example, `git reset --hard` — and passes it to the Bash tool.
+  </Step>
+  <Step title="PreToolUse hook fires">
+    Before the Bash tool executes anything, CC Safety Net intercepts the call. This happens at the hook layer, which runs *before* the permission system and before the OS ever sees the command.
+  </Step>
+  <Step title="Semantic analysis">
+    CC Safety Net parses the command into its components — executable, subcommand, flags, and arguments — and analyzes the intent of the operation. See [Semantic Analysis](#semantic-analysis) below for details.
+  </Step>
+  <Step title="Decision returned">
+    If the command is determined to be destructive, the agent receives a `BLOCKED` response with a human-readable reason explaining what the command does and what to do instead. If the command is safe, it is allowed through and executes normally.
+  </Step>
+</Steps>
+
+## Semantic Analysis
+
+CC Safety Net uses semantic analysis rather than simple string matching. This distinction matters in practice.
+
+When a command arrives, it is parsed into its structural components:
+
+- **Executable** — the base program (`git`, `rm`, `find`, etc.)
+- **Subcommand** — the operation being requested (`checkout`, `reset`, `push`, etc.)
+- **Flags** — options that modify behavior (`--hard`, `-f`, `-r`, etc.)
+- **Arguments** — the targets the command acts on (file paths, branch names, refs, etc.)
+
+With this parsed representation, CC Safety Net reasons about *what the command will do*, not just *what it looks like*. Consider two commands that share the same base:
+
+| Command | Intent | Outcome |
+|---|---|---|
+| `git checkout -b feature` | Creates a new branch | **Allowed** |
+| `git checkout -- file` | Discards uncommitted changes in a file | **Blocked** |
+
+Both start with `git checkout`. A pattern-matching approach either blocks both or neither. Semantic analysis distinguishes them and makes the right call in each case — protecting you from accidental data loss without blocking everyday workflows.
+
+## Shell Wrapper Detection
+
+Wrapping a destructive command in a shell invocation doesn't hide it from CC Safety Net. Shell wrappers like `bash -c '...'` are recursively unwrapped and the inner command is subjected to the same semantic analysis. This unwrapping goes up to **5 levels deep**.
+
+```bash
+bash -c 'git reset --hard'    # → analyzed → BLOCKED
+sh -lc 'rm -rf /'             # → analyzed → BLOCKED
+```
+
+This means an agent cannot bypass protection simply by embedding a blocked command inside a shell invocation.
+
+## Interpreter One-Liner Detection
+
+Destructive commands can also be hidden inside interpreter one-liners. By default, CC Safety Net analyzes the content of one-liners passed to Python, Node, Ruby, and Perl for embedded destructive operations:
+
+```bash
+python -c 'import os; os.system("rm -rf /")'  # BLOCKED
+```
+
+If you want stricter behavior, set `SAFETY_NET_PARANOID_INTERPRETERS=1` to block *all* interpreter one-liners outright — regardless of their content.
+
+## Block Output Format
+
+When CC Safety Net blocks a command, the agent receives a structured response as the tool result. A typical block message looks like this:
+
+```text
+BLOCKED by Safety Net
+
+Reason: git checkout -- discards uncommitted changes permanently. Use 'git stash' first.
+
+Command: git checkout -- src/main.py
+
+If this operation is truly needed, ask the user for explicit permission and have them run the command manually.
+```
+
+The agent reads this as the tool response and typically surfaces the explanation to you. The message tells the agent what went wrong, why it's dangerous, and how to proceed safely — either by using a safer alternative or by asking you to run the command manually with explicit intent.
+
+## Audit Logging
+
+Every blocked command is written to a structured log file for later review:
+
+```text
+~/.cc-safety-net/logs/<session_id>.jsonl
+```
+
+Each entry in the log is a JSON object on its own line:
+
+```json
+{"ts": "2025-01-15T10:30:00Z", "command": "git reset --hard", "segment": "git reset --hard", "reason": "...", "cwd": "/path/to/project"}
+```
+
+| Field | Description |
+|---|---|
+| `ts` | ISO 8601 timestamp of when the command was blocked |
+| `command` | The full command string as received |
+| `segment` | The specific segment that triggered the block (may differ for wrapped commands) |
+| `reason` | The human-readable reason for blocking |
+| `cwd` | The working directory at the time of the call |
+
+Sensitive data (tokens, passwords, API keys) in log entries is automatically redacted before they are written to disk.
+
+## Secret Redaction
+
+Block messages and log entries both go through automatic secret redaction before being surfaced to the agent or written to disk. This ensures that if a destructive command happens to include a token, credential, or API key in its arguments, that sensitive data is never exposed in agent responses or audit logs.

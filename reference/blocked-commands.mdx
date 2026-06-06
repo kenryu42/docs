@@ -1,0 +1,53 @@
+---
+title: "Commands Blocked by CC Safety Net"
+sidebarTitle: "Blocked Commands"
+description: "Complete reference of git, rm, find, and xargs commands that CC Safety Net blocks by default, with the reason each command is considered destructive."
+---
+
+CC Safety Net blocks these commands because they can permanently destroy data — uncommitted changes, stashed work, or remote history. The list below covers the default built-in rules; custom rules can extend this list.
+
+## Git Commands
+
+| Command Pattern | Why It's Blocked |
+|---|---|
+| `git checkout -- <files>` | Discards uncommitted changes permanently |
+| `git checkout <ref> -- <path>` | Overwrites working tree with ref version |
+| `git checkout <ref> <path>` | May overwrite working tree when Git disambiguates ref vs pathspec |
+| `git restore <files>` | Discards uncommitted changes |
+| `git restore --worktree` | Explicitly discards working tree changes |
+| `git reset --hard` | Destroys all uncommitted changes |
+| `git reset --merge` | Can lose uncommitted changes |
+| `git clean -f` | Removes untracked files permanently |
+| `git push --force` / `-f` | Destroys remote history |
+| `git branch -D` | Force-deletes branch without merge check |
+| `git stash drop` | Permanently deletes stashed changes |
+| `git stash clear` | Deletes ALL stashed changes |
+| `git worktree remove --force` | Force-deletes worktree without checking for changes |
+
+## Filesystem Commands
+
+| Command Pattern | Why It's Blocked |
+|---|---|
+| `rm -rf` (paths outside cwd) | Recursive deletion outside current directory |
+| `rm -rf /` or `~` or `$HOME` | Root/home deletion is extremely dangerous |
+| `find ... -delete` | Permanently removes files matching criteria |
+| `xargs rm -rf` | Dynamic input makes targets unpredictable |
+| `xargs <shell> -c` | Can execute arbitrary commands |
+| `parallel rm -rf` | Dynamic input makes targets unpredictable |
+| `parallel <shell> -c` | Can execute arbitrary commands |
+
+## Shell Wrappers and Interpreter One-Liners
+
+Commands wrapped in shell interpreters like `bash -c` or `sh -c` are also blocked. CC Safety Net recursively analyzes nested wrappers up to 5 levels deep, so there is no bypass through indirection.
+
+With `SAFETY_NET_PARANOID_INTERPRETERS=1`, interpreter one-liners — including `python -c`, `node -e`, `ruby -e`, and `perl -e` — are blocked as well, since they can hide destructive operations behind a language runtime.
+
+```bash
+bash -c 'git reset --hard'                       # Blocked
+sh -lc 'rm -rf /'                                # Blocked
+python -c 'import os; os.system("rm -rf /")'     # Blocked (with PARANOID_INTERPRETERS)
+```
+
+<Note>
+  The `explain` command lets you trace exactly why CC Safety Net blocks or allows any specific command. See the [CLI Commands](/reference/cli-commands) reference.
+</Note>

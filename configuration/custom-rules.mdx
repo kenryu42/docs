@@ -1,0 +1,210 @@
+---
+title: "CC Safety Net Custom Rules: Block Any Command Pattern"
+sidebarTitle: "Custom Rules"
+description: "Define project and user-level custom blocking rules in CC Safety Net using JSON config files. Block any command pattern with a custom reason message."
+---
+
+Beyond built-in protections, CC Safety Net lets you define custom blocking rules to enforce team conventions or project-specific safety policies. Rules live in JSON config files and are merged from user and project scopes, so you can maintain personal defaults alongside per-project overrides without duplication.
+
+## Config File Locations
+
+CC Safety Net loads rules from two locations and merges them together:
+
+- **User scope** — `~/.cc-safety-net/config.json`: Always loaded when it exists. Use this for personal defaults that apply to every project you work on.
+- **Project scope** — `.safety-net.json` in the project root: Loaded when it exists in the current working directory. Use this for team or project-specific rules that you can commit to source control.
+
+**Merging behavior:** Rules from both files are combined into a single rule set. If the same rule `name` appears in both files, the **project scope wins** and the user-scope version of that rule is dropped. Rule name comparison is case-insensitive — `MyRule` and `myrule` are treated as duplicates.
+
+## Quick Start
+
+Create `.safety-net.json` in your project root to get started immediately:
+
+```json
+{
+  "version": 1,
+  "rules": [
+    {
+      "name": "block-git-add-all",
+      "command": "git",
+      "subcommand": "add",
+      "block_args": ["-A", "--all", "."],
+      "reason": "Use 'git add <specific-files>' instead of blanket add."
+    }
+  ]
+}
+```
+
+With this config in place, `git add -A`, `git add --all`, and `git add .` will each be blocked with your custom message.
+
+## Rule Schema
+
+### Top-level config fields
+
+<ParamField body="version" type="integer" required>
+  Schema version. Must be `1`. This field is required.
+</ParamField>
+
+<ParamField body="rules" type="array">
+  List of custom blocking rules. Defaults to an empty array if omitted.
+</ParamField>
+
+### Rule fields
+
+Each object in the `rules` array supports the following fields:
+
+<ParamField body="name" type="string" required>
+  Unique identifier for the rule. Must start with a letter and contain only letters, numbers, hyphens, and underscores. Maximum 64 characters. Rule names are compared case-insensitively for duplicate detection.
+</ParamField>
+
+<ParamField body="command" type="string" required>
+  The base command to match, for example `git`, `npm`, or `docker`. Paths are normalized to their basename before matching — `/usr/bin/git` is treated the same as `git`.
+</ParamField>
+
+<ParamField body="subcommand" type="string">
+  The first non-option argument after the command, for example `add`, `install`, or `system`. If omitted, the rule matches any subcommand (or no subcommand).
+</ParamField>
+
+<ParamField body="block_args" type="array" required>
+  One or more arguments that trigger the block. The command is blocked if **any** argument in this array is present in the actual invocation. At least one entry is required.
+</ParamField>
+
+<ParamField body="reason" type="string" required>
+  The message displayed to the agent when the command is blocked. Maximum 256 characters. Keep this concise and actionable — explain why the command is blocked and what to do instead.
+</ParamField>
+
+## Matching Behavior
+
+Understanding how CC Safety Net matches commands against your rules helps you write precise, effective rules:
+
+- **Command normalization**: Commands are reduced to their basename before matching. `/usr/local/bin/npm` matches a rule with `"command": "npm"`.
+- **Subcommand detection**: The subcommand is the first non-option argument following the command. In `git --no-pager add -A`, the subcommand is `add`.
+- **Argument matching**: Arguments in `block_args` are matched literally. There is no regex or glob support.
+- **Short option expansion**: Bundled short flags are unbundled before matching. `-Ap` is treated as `-A` and `-p`, so a rule blocking `-A` will match `-Ap`.
+- **Long option matching**: Long options use exact string matching. `--all-files` does **not** match a rule blocking `--all`.
+- **ANY semantics**: A command is blocked if any single argument in `block_args` is present. You do not need all arguments to match.
+- **Additive only**: Custom rules can only add new restrictions. They cannot bypass or override built-in protections.
+
+## Examples
+
+<AccordionGroup>
+  <Accordion title="Block global npm installs">
+    Prevent the agent from installing packages globally, which can cause version conflicts across projects:
+
+    ```json
+    {
+      "version": 1,
+      "rules": [
+        {
+          "name": "block-npm-global",
+          "command": "npm",
+          "subcommand": "install",
+          "block_args": ["-g", "--global"],
+          "reason": "Global npm installs can cause version conflicts. Use npx or local install."
+        }
+      ]
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Block dangerous docker commands">
+    Block `docker system prune`, which removes all unused images, containers, networks, and volumes:
+
+    ```json
+    {
+      "version": 1,
+      "rules": [
+        {
+          "name": "block-docker-system-prune",
+          "command": "docker",
+          "subcommand": "system",
+          "block_args": ["prune"],
+          "reason": "docker system prune removes all unused data. Use targeted cleanup instead."
+        }
+      ]
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Multiple rules in one file">
+    You can define as many rules as needed in a single config file:
+
+    ```json
+    {
+      "version": 1,
+      "rules": [
+        {
+          "name": "block-git-add-all",
+          "command": "git",
+          "subcommand": "add",
+          "block_args": ["-A", "--all", ".", "-u", "--update"],
+          "reason": "Use 'git add <specific-files>' instead of blanket add."
+        },
+        {
+          "name": "block-npm-global",
+          "command": "npm",
+          "subcommand": "install",
+          "block_args": ["-g", "--global"],
+          "reason": "Use npx or local install instead of global."
+        }
+      ]
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Block Output Format
+
+When a custom rule blocks a command, the agent sees the rule name alongside your custom reason message:
+
+```text
+BLOCKED by Safety Net
+
+Reason: [block-git-add-all] Use 'git add <specific-files>' instead of blanket add.
+
+Command: git add -A
+```
+
+The rule name in square brackets makes it easy to identify which rule triggered the block.
+
+## Validating Your Config
+
+After creating or editing a config file, validate it before relying on it:
+
+```bash
+npx cc-safety-net --verify-config
+# or with bun
+bunx cc-safety-net --verify-config
+```
+
+This command checks both your user-scope and project-scope config files, reports any validation errors, and confirms that your rules will be applied correctly.
+
+## Inline Documentation
+
+Run `--custom-rules-doc` to print full custom-rules documentation directly in your terminal — useful when working inside an AI coding agent that needs context about the rule format:
+
+```bash
+npx cc-safety-net --custom-rules-doc
+```
+
+You can also use the **`set-custom-rules` skill** inside Claude Code to create and manage custom rules interactively using natural language. If your agent does not support skills, prompt it with:
+
+```text
+run npx cc-safety-net --custom-rules-doc and help me set up custom rules
+```
+
+## Error Handling
+
+CC Safety Net uses **silent fallback** for config errors. If your config file is present but invalid for any reason, the file is ignored and only built-in rules apply. No error is surfaced to the agent at runtime.
+
+| Scenario | Behavior |
+|---|---|
+| Config file not found | Silent — built-in rules only |
+| Empty config file | Silent — built-in rules only |
+| Invalid JSON | Silent — built-in rules only |
+| Missing required field | Silent — built-in rules only |
+| Invalid field format | Silent — built-in rules only |
+| Duplicate rule name | Silent — built-in rules only |
+
+<Warning>
+  If your config fails to load for any reason, CC Safety Net silently falls back to built-in rules only — your custom rules will not be active. Always validate your config with `npx cc-safety-net --verify-config` (or `bunx cc-safety-net --verify-config`) after making any changes to catch problems before they silently go unnoticed.
+</Warning>

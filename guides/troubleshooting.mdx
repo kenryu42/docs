@@ -1,0 +1,145 @@
+---
+title: "Troubleshooting CC Safety Net Installation and Behavior"
+sidebarTitle: "Troubleshooting"
+description: "Fix common CC Safety Net issues: hook not firing, commands not blocked, false positives, custom rules not loading, and status line not showing."
+---
+
+This guide covers the most common issues with CC Safety Net and how to resolve them. Start with the `doctor` command — it automates most diagnostics and will catch the majority of configuration problems in one pass.
+
+## Run Diagnostics First
+
+```bash
+npx cc-safety-net doctor
+bunx cc-safety-net doctor
+```
+
+The `doctor` command runs a comprehensive health check of your installation:
+
+| Check | What It Does |
+|---|---|
+| Hook Integration | Verifies the plugin is properly configured for each supported platform |
+| Self-Test | Runs sample commands to confirm blocking is working correctly |
+| Configuration | Validates custom rules in your user and project config files |
+| Environment | Shows the status of mode flags (`SAFETY_NET_STRICT`, `SAFETY_NET_PARANOID`, etc.) |
+| Recent Activity | Summarizes blocked commands from the last 7 days |
+| System Info | Displays versions of all relevant tools |
+| Update Check | Checks whether a newer version is available |
+
+Review the output before diving into the individual issues below. Most problems are visible here.
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Hook not firing — commands execute without being checked">
+    If you run a command that should be blocked and it executes without any intervention, the hook is not registered correctly for your agent.
+
+    **Steps to resolve:**
+
+    1. Run `npx cc-safety-net doctor` — it checks hook integration for each supported platform and will flag misconfiguration.
+    2. **Claude Code**: run `/plugin` inside Claude Code and confirm that `safety-net` appears in the installed plugins list. If it doesn't appear, reinstall with `/plugin install safety-net@cc-marketplace`.
+    3. **Codex**: open your `~/.codex/config.toml` and verify that `plugin_hooks = true` is set under `[features]`. Then run `/hooks` in the TUI, select the safety-net PreToolUse hook, and press `t` to mark it as trusted. Without the trust step, the hook will not fire.
+    4. After making any changes, reload your agent session.
+  </Accordion>
+
+  <Accordion title="A destructive command wasn't blocked">
+    If a command you expected to be blocked was allowed through, there are a few possible explanations.
+
+    **Steps to resolve:**
+
+    1. Run `npx cc-safety-net explain "<the command>"` to see the full step-by-step analysis of how CC Safety Net evaluated that specific command. This will show you exactly which rules were checked and why the command was allowed.
+    2. The command may fall into an explicitly allowed category. For example, `rm -rf` within the current working directory is allowed by default because it's scoped to your project. See the [Commands Allowed](/reference/allowed-commands) reference for the full list.
+    3. If you need the command blocked in your context, create a custom rule in `.safety-net.json` at your project root. See the custom rules documentation for the schema.
+    4. If you believe the command should have been blocked by a built-in rule and wasn't, share the output of `npx cc-safety-net doctor --json` when filing a bug report.
+  </Accordion>
+
+  <Accordion title="CC Safety Net is blocking a command I need">
+    Built-in rules are conservative by design. If a command you need is being blocked, you have several options.
+
+    **Steps to resolve:**
+
+    1. Run `npx cc-safety-net explain "<the command>"` to understand exactly why it's being blocked and which rule matched.
+    2. Consider these alternatives depending on your situation:
+       - **Working in a linked git worktree?** Set `SAFETY_NET_WORKTREE=1`. This relaxes local-discard rules when the command is proven to run inside a linked worktree, which is designed to be a disposable, isolated workspace.
+       - **Need a safer variant?** For example, `git push --force-with-lease` is allowed and provides the same outcome as `--force` with an added safety check. `git clean -n` (dry-run) is allowed and lets you preview what would be removed.
+       - **Command is genuinely needed?** Run it manually outside the agent. This is always an option, and CC Safety Net will tell the agent to ask you to do exactly this when a block fires.
+    3. If none of the above apply, you can add a custom allow path by structuring the situation so the agent asks you to run the command directly.
+  </Accordion>
+
+  <Accordion title="Custom rules not loading">
+    CC Safety Net uses silent fallback error handling for custom rules — if your config file has any problem, it silently falls back to built-in rules only, with no error shown to the agent.
+
+    **Steps to resolve:**
+
+    1. Run `npx cc-safety-net --verify-config` to explicitly validate your config file and see any errors. This is the fastest way to find the problem.
+    2. Check that you're using the correct file locations:
+       - **User scope**: `~/.cc-safety-net/config.json` (loaded globally, always)
+       - **Project scope**: `.safety-net.json` in your project root (loaded when you're working in that directory)
+    3. Ensure your config file is valid JSON. Common mistakes include trailing commas and unquoted keys. Run the file through a JSON validator if you're unsure.
+    4. Confirm that `"version": 1` is present at the top level of the config object. This field is required.
+    5. After fixing the file, run `npx cc-safety-net explain "some command"` to confirm your rules are now active.
+  </Accordion>
+
+  <Accordion title="Status line not showing in Claude Code">
+    The status line requires an entry in `~/.claude/settings.json`. If it's not appearing, the entry is likely missing, malformed, or pointing to the wrong runtime.
+
+    **Steps to resolve:**
+
+    1. Open `~/.claude/settings.json` and verify the `statusLine` entry is present. It should look like one of the following:
+
+       ```json
+       { "statusLine": { "type": "command", "command": "bunx cc-safety-net --statusline" } }
+       ```
+
+       ```json
+       { "statusLine": { "type": "command", "command": "npx -y cc-safety-net --statusline" } }
+       ```
+
+    2. Changes to this file take effect immediately — you do not need to restart Claude Code.
+    3. If you're using the `claude x` variant, note that it is only compatible with the native version of Claude Code. If you installed Claude Code via npm, use `npx` or `bunx` instead.
+    4. Test the status line command directly in your terminal to confirm it produces output:
+
+       ```bash
+       bunx cc-safety-net --statusline
+       ```
+
+       If this command fails, the status line will be blank inside Claude Code.
+  </Accordion>
+
+  <Accordion title="Getting an update">
+    CC Safety Net should be kept up to date to get the latest blocking rules and bug fixes.
+
+    **Claude Code (plugin marketplace):**
+
+    Go to `/plugin` → select `Marketplaces` → choose `cc-marketplace` → enable auto-update. Alternatively, re-run the install command to pull the latest version:
+
+    ```bash
+    /plugin install safety-net@cc-marketplace
+    ```
+
+    **npm / npx:**
+
+    If you're invoking CC Safety Net via `npx`, use the `@latest` tag to always run the newest version:
+
+    ```bash
+    npx cc-safety-net@latest doctor
+    ```
+
+    If you have a local install, update it with your package manager.
+
+    **Check your current version:**
+
+    ```bash
+    npx cc-safety-net --version
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Getting Help
+
+If you're unable to resolve an issue with the steps above, collect the full diagnostic output before filing a report:
+
+```bash
+npx cc-safety-net doctor --json
+```
+
+The `--json` flag produces structured output that captures your environment, installed versions, hook configuration, and self-test results in a single snapshot. Include this output when [opening an issue on GitHub](https://github.com/kenryu42/claude-code-safety-net/issues).
